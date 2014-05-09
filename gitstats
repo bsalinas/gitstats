@@ -753,13 +753,15 @@ class JSONReportCreator(ReportCreator):
 		toWrite['authors'] = data.getAuthors()
 		toWrite['history'] = {}
 		toWrite['history']['by_week'] = []
+		toWrite['history']['by_month'] = []
+		toWrite['history']['by_year'] = []
 
 		deltaweek = datetime.timedelta(7)
 		sortedWeeks = sorted(data.activity_by_year_week)
 		start = datetime.datetime.strptime(sortedWeeks[0]+'-0', '%Y-%W-%w')
 		end = datetime.datetime.now()
 		thisTime = start
-		while end - thisTime > deltaweek:
+		while end - thisTime >= deltaweek:
 			week = thisTime.strftime('%Y-%W')
 			commits = 0
 			added = 0
@@ -772,6 +774,54 @@ class JSONReportCreator(ReportCreator):
 				removed = data.lines_removed_by_week[week]
 			toWrite['history']['by_week'].append({'week':week,'commits':commits, 'additions':added, 'deletions':removed})
 			thisTime += deltaweek
+
+		startMonth = start.month
+		startYear = start.year
+		endMonth = end.month
+		endYear = end.year
+		thisMonth = start.month
+		thisYear = start.year
+		print data.lines_added_by_month
+
+		while thisMonth <= endMonth or thisYear <= endYear:
+			thisDate = datetime.datetime(thisYear, thisMonth, 1)
+			thisMonthString = thisDate.strftime('%Y-%m')
+			monthly_commits = 0
+			monthly_additions = 0
+			monthly_deletions = 0
+			if thisMonthString in data.commits_by_month:
+				monthly_commits = data.commits_by_month[thisMonthString]
+			if thisMonthString in data.lines_added_by_month:
+				monthly_additions = data.lines_added_by_month[thisMonthString]
+			if thisMonthString in data.lines_removed_by_month:
+				monthly_deletions = data.lines_removed_by_month[thisMonthString]
+			toAppend = {'month':thisMonthString, 'commits':monthly_commits, 'additions':monthly_additions, 'deletions': monthly_deletions}
+			toWrite['history']['by_month'].append(toAppend)
+
+			thisMonth = thisMonth + 1
+			if thisMonth > 12:
+				thisMonth = 1
+				thisYear = thisYear + 1
+			if thisMonth > endMonth and thisYear >= endYear:
+				break
+
+		thisYear = start.year
+		while thisYear <= endYear:
+			yearly_commits = 0
+			yearly_additions = 0
+			yearly_deletions = 0
+			if thisYear in data.commits_by_year:
+				yearly_commits = data.commits_by_year[thisYear]
+			if thisYear in data.lines_added_by_year:
+				yearly_additions = data.lines_added_by_year[thisYear]
+			if thisYear in data.lines_removed_by_year:
+				yearly_deletions = data.lines_removed_by_year[thisYear]
+
+			toAppend = {'year':thisYear, 'commits':yearly_commits, 'additions':yearly_additions, 'deletions': yearly_deletions}
+			toWrite['history']['by_year'].append(toAppend)
+			thisYear = thisYear + 1
+
+
 		
 		toWrite['activity']={}
 		toWrite['activity']['hour_of_day']=data.getActivityByHourOfDay()

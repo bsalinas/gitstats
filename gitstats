@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 import zlib
+import json
 
 if sys.version_info < (2, 6):
        print >> sys.stderr, "Python 2.6 or higher is required for gitstats"
@@ -155,8 +156,10 @@ class DataCollector:
 		self.commits_by_month = {} # month -> commits
 		self.commits_by_year = {} # year -> commits
 		self.lines_added_by_month = {} # month -> lines added
+		self.lines_added_by_week = {} # week -> lines added
 		self.lines_added_by_year = {} # year -> lines added
 		self.lines_removed_by_month = {} # month -> lines removed
+		self.lines_removed_by_week = {} # month -> lines removed
 		self.lines_removed_by_year = {} # year -> lines removed
 		self.first_commit_stamp = 0
 		self.last_commit_stamp = 0
@@ -545,6 +548,11 @@ class GitDataCollector(DataCollector):
 						self.changes_by_date[stamp] = { 'files': files, 'ins': inserted, 'del': deleted, 'lines': total_lines }
 
 						date = datetime.datetime.fromtimestamp(stamp)
+						
+						yyww = date.strftime('%Y-%W')
+						self.lines_added_by_week[yyww] = self.lines_added_by_week.get(yyww,0)+inserted
+						self.lines_removed_by_week[yyww] = self.lines_removed_by_week.get(yyww,0)+deleted
+
 						yymm = date.strftime('%Y-%m')
 						self.lines_added_by_month[yymm] = self.lines_added_by_month.get(yymm, 0) + inserted
 						self.lines_removed_by_month[yymm] = self.lines_removed_by_month.get(yymm, 0) + deleted
@@ -721,6 +729,58 @@ def html_linkify(text):
 def html_header(level, text):
 	name = html_linkify(text)
 	return '\n<h%d><a href="#%s" name="%s">%s</a></h%d>\n\n' % (level, name, name, text, level)
+
+class JSONReportCreator(ReportCreator):
+	def writeJSONFile(self, data, name):
+		f=open(self.path+'/'+name+'.json','w')
+		f.write(json.dumps(data,indent=4))
+		f.close()
+	def convertDate(self, date):
+		return date.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+	def create(self, data, path):
+		ReportCreator.create(self, data, path)
+		# print(pprint(vars(data)))
+		toWrite = {}
+		toWrite['general']={}
+		toWrite['general']['name']=data.projectname
+		toWrite['general']['report_start']=self.convertDate(data.getFirstCommitDate())
+		toWrite['general']['report_end']=self.convertDate(data.getLastCommitDate())
+		toWrite['general']['num_files'] = data.getTotalFiles()
+		toWrite['general']['total_lines']=data.getTotalLOC()
+		toWrite['general']['total_lines_added']=data.total_lines_added
+		toWrite['general']['total_lines_removed']=data.total_lines_removed
+		toWrite['authors'] = data.getAuthors()
+		toWrite['history'] = {}
+		toWrite['history']['by_week'] = []
+
+		deltaweek = datetime.timedelta(7)
+		sortedWeeks = sorted(data.activity_by_year_week)
+		start = datetime.datetime.strptime(sortedWeeks[0]+'-0', '%Y-%W-%w')
+		end = datetime.datetime.now()
+		thisTime = start
+		while end - thisTime > deltaweek:
+			week = thisTime.strftime('%Y-%W')
+			commits = 0
+			added = 0
+			removed = 0
+			if week in data.activity_by_year_week:
+				commits = data.activity_by_year_week[week]
+			if week in data.lines_added_by_week:
+				added = data.lines_added_by_week[week]
+			if week in data.lines_removed_by_week:
+				removed = data.lines_removed_by_week[week]
+			toWrite['history']['by_week'].append({'week':week,'commits':commits, 'additions':added, 'deletions':removed})
+			thisTime += deltaweek
+		
+		toWrite['activity']={}
+		toWrite['activity']['hour_of_day']=data.getActivityByHourOfDay()
+		toWrite['activity']['day_of_week']=data.getActivityByDayOfWeek()
+		# toWrite['activity']['activeDays']= data.getActiveDays()
+		self.writeJSONFile(toWrite,'authors')
+
+
+
 
 class HTMLReportCreator(ReportCreator):
 	def create(self, data, path):
@@ -1466,7 +1526,8 @@ class GitStats:
 		os.chdir(rundir)
 
 		print 'Generating report...'
-		report = HTMLReportCreator()
+		# report = HTMLReportCreator()
+		report = JSONReportCreator()
 		report.create(data, outputpath)
 
 		time_end = time.time()

@@ -821,8 +821,8 @@ class JSONReportCreator(ReportCreator):
 			toWrite['history']['by_year'].append(toAppend)
 			thisYear = thisYear + 1
 
+		toWrite['tags']=data.tags
 
-		
 		toWrite['activity']={}
 		toWrite['activity']['hour_of_day']=data.getActivityByHourOfDay()
 		toWrite['activity']['day_of_week']=data.getActivityByDayOfWeek()
